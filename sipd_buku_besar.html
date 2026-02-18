@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Download Buku Besar (.xlsx)</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 24px;
+            background: #f7fafc;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 900px;
+            margin: auto;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+        }
+
+        h1 {
+            margin: 0 0 12px 0;
+            font-size: 22px;
+        }
+
+        label {
+            font-weight: 600;
+            display: block;
+            margin-top: 12px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            margin-top: 6px;
+        }
+
+        button {
+            margin-top: 18px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            background: #0ea5a4;
+            color: white;
+            border: 0;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        pre {
+            background: #1f2937;
+            color: #f3f4f6;
+            padding: 14px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+
+<body>
+    <div class="card">
+        <h1>Download Buku Besar → Excel (.xlsx)</h1>
+
+        <label>URL API Buku Besar</label>
+        <input id="url" type="text"
+            value="https://service.sipd.kemendagri.go.id/aklap/api/buku-besar/list?skpd=0&kode_rekening=5&length=99999999&page=1&start_date=2025-01-01&end_date=2025-12-31" />
+
+        <label>Bearer Token (tanpa kata 'Bearer')</label>
+        <input id="token" type="text" placeholder="isi token di sini..." />
+
+        <label>Nama File XLSX</label>
+        <input id="filename" type="text" value="buku_besar.xlsx" />
+
+        <button id="btn">Download XLSX</button>
+
+        <pre id="log">Belum ada aksi...</pre>
+    </div>
+
+    <script>
+        (function () {
+
+            const HEADERS = [
+                'journal_date', 'kodeRekening', 'namaRekening', 'journal_number', 'dok_sumber',
+                'position', 'amount', 'keterangan', 'nama_skpd', 'kode_skpd', 'kode_unit', 'jenis', 'id'
+            ];
+
+            // MAP nama SKPD → kode_unit
+            const MAP_UNIT = {
+                "RSUD LANTO DG PASEWANG": "1.02.0.00.0.00.01.0001",
+                "RSUD RUMBIA": "1.02.0.00.0.00.01.0002",
+                "PUSKESMAS BINAMU": "1.02.0.00.0.00.01.0003",
+                "PUSKESMAS BINAMU KOTA": "1.02.0.00.0.00.01.0004",
+                "PUSKESMAS BONTOSUNGGU KOTA": "1.02.0.00.0.00.01.0005",
+                "PUSKESMAS TAMALATEA": "1.02.0.00.0.00.01.0006",
+                "PUSKESMAS BONTORAMBA": "1.02.0.00.0.00.01.0007",
+                "PUSKESMAS BANGKALA": "1.02.0.00.0.00.01.0008",
+                "PUSKESMAS KAPITA": "1.02.0.00.0.00.01.0009",
+                "PUSKESMAS BULUDOANG": "1.02.0.00.0.00.01.0010",
+                "PUSKESMAS BARANA": "1.02.0.00.0.00.01.0011",
+                "PUSKESMAS BONTOMATENE": "1.02.0.00.0.00.01.0012",
+                "PUSKESMAS BULULOE": "1.02.0.00.0.00.01.0013",
+                "PUSKESMAS TOLO": "1.02.0.00.0.00.01.0014",
+                "PUSKESMAS TOMPOBULU": "1.02.0.00.0.00.01.0015",
+                "PUSKESMAS RUMBIA": "1.02.0.00.0.00.01.0016",
+                "PUSKESMAS ARUNGKEKE": "1.02.0.00.0.00.01.0017",
+                "PUSKESMAS TOGO-TOGO": "1.02.0.00.0.00.01.0018",
+                "PUSKESMAS TAROWANG": "1.02.0.00.0.00.01.0019",
+                "PUSKESMAS TINO": "1.02.0.00.0.00.01.0020",
+                "PUSKESMAS BULUSIBATANG": "1.02.0.00.0.00.01.0021",
+                "PUSKESMAS EMBO": "1.02.0.00.0.00.01.0022",
+
+                "KELURAHAN PANTAI BAHARI": "7.01.0.00.0.00.01.0001",
+                "KELURAHAN BONTORANNU": "7.01.0.00.0.00.01.0002",
+                "KELURAHAN PALLENGU": "7.01.0.00.0.00.01.0003",
+                "KELURAHAN BENTENG": "7.01.0.00.0.00.01.0004",
+                "KELURAHAN MANJANGLOE": "7.01.0.00.0.00.02.0001",
+                "KELURAHAN TAMANROYA": "7.01.0.00.0.00.02.0002",
+                "KELURAHAN TONROKASSI TIMUR": "7.01.0.00.0.00.02.0003",
+                "KELURAHAN TONROKASSI": "7.01.0.00.0.00.02.0004",
+                "KELURAHAN TONROKASSI BARAT": "7.01.0.00.0.00.02.0005",
+                "KELURAHAN BONTOTANGNGA": "7.01.0.00.0.00.02.0006",
+                "KELURAHAN EMPOANG": "7.01.0.00.0.00.03.0001",
+                "KELURAHAN EMPOANG UTARA": "7.01.0.00.0.00.03.0002",
+                "KELURAHAN EMPOANG SELATAN": "7.01.0.00.0.00.03.0003",
+                "KELURAHAN BALANG": "7.01.0.00.0.00.03.0004",
+                "KELURAHAN MONRO-MONRO": "7.01.0.00.0.00.03.0005",
+                "KELURAHAN PANAIKANG": "7.01.0.00.0.00.03.0006",
+                "KELURAHAN BONTOA": "7.01.0.00.0.00.03.0007",
+                "KELURAHAN BALANG TOA": "7.01.0.00.0.00.03.0008",
+                "KELURAHAN BALANG BERU": "7.01.0.00.0.00.03.0009",
+                "KELURAHAN SIDENRE": "7.01.0.00.0.00.03.0010",
+                "KELURAHAN PABIRINGA": "7.01.0.00.0.00.03.0011",
+                "KELURAHAN BIRINGKASSI": "7.01.0.00.0.00.03.0012",
+                "KELURAHAN TOGO-TOGO": "7.01.0.00.0.00.04.0001",
+                "KELURAHAN BONTORAYA": "7.01.0.00.0.00.04.0002",
+                "KELURAHAN TOLO": "7.01.0.00.0.00.05.0001",
+                "KELURAHAN TOLO UTARA": "7.01.0.00.0.00.05.0002",
+                "KELURAHAN TOLO TIMUR": "7.01.0.00.0.00.05.0003",
+                "KELURAHAN TOLO BARAT": "7.01.0.00.0.00.05.0004",
+                "KELURAHAN TOLO SELATAN": "7.01.0.00.0.00.05.0005",
+                "KELURAHAN BULUJAYA": "7.01.0.00.0.00.06.0001",
+                "KELURAHAN BONTORAMBA": "7.01.0.00.0.00.07.0001"
+            };
+
+            function log(msg) {
+                document.getElementById('log').textContent =
+                    (typeof msg === "object") ? "Berhasil ambil data" : msg;
+            }
+
+            function downloadWorkbook(workbook, filename) {
+                const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+
+            document.getElementById('btn').addEventListener('click', function () {
+
+                const url = document.getElementById('url').value.trim();
+                const token = document.getElementById('token').value.trim();
+                const filename = document.getElementById('filename').value.trim() || 'data.xlsx';
+
+                if (!url) return alert("URL wajib diisi.");
+                if (!token) return alert("Token Bearer wajib diisi.");
+
+                log("Mengirim request...");
+
+                const xhr = new XMLHttpRequest();
+                xhr.open("GET", url, true);
+                xhr.setRequestHeader("Authorization", "Bearer " + token);
+                xhr.setRequestHeader("Accept", "application/json");
+                xhr.responseType = "text";
+
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+
+                        let json;
+                        try { json = JSON.parse(xhr.responseText); }
+                        catch (e) {
+                            log("Gagal parse JSON:\n" + xhr.responseText);
+                            return;
+                        }
+
+                        const list = json?.data?.list || [];
+                        if (!Array.isArray(list) || list.length === 0) {
+                            alert("Data kosong / struktur salah");
+                            return;
+                        }
+
+                        const rows = list.map(item => {
+
+                            // -----------------------------------
+                            // Ambil kode SKPD → bagian ke-6 dari slash "/"
+                            // -----------------------------------
+                            let kodeSkpd = "";
+                            if (item.journal_number) {
+                                const parts = item.journal_number.split("/");
+                                kodeSkpd = parts[5] || ""; // posisi ke-6
+                            }
+
+                            // -----------------------------------
+                            // Ambil kode_unit dari MAP, fallback → kodeSkpd
+                            // -----------------------------------
+                            let kodeUnit = MAP_UNIT[item.nama_skpd] || "";
+                            if (!kodeUnit) kodeUnit = kodeSkpd;
+
+                            // amount ke float
+                            let amountFloat = parseFloat(item.amount) || 0;
+                            if(item.dok_sumber){
+                                if (item.dok_sumber.includes("LS")) {
+                                    if (item.position == 'debet') {
+                                        jenis = 'sp2d';
+                                    } else {
+                                        jenis = 'sts';
+                                    }
+                                } else {
+                                    if (item.position == 'debet') {
+                                        jenis = 'tbp';
+                                    } else {
+                                        jenis = 'sts';
+                                    }
+                                }
+                            }else{
+                                jenis = 'sp3b';
+                            }
+                            return {
+                                journal_date: item.journal_date || "",
+                                kodeRekening: item.kodeRekening || "",
+                                namaRekening: item.namaRekening || "",
+                                journal_number: item.journal_number || "",
+                                dok_sumber: item.dok_sumber || "",
+                                position: item.position || "",
+                                amount: amountFloat,
+                                keterangan: item.keterangan || "",
+                                nama_skpd: item.nama_skpd || "",
+                                kode_skpd: kodeSkpd,
+                                kode_unit: kodeUnit,
+                                jenis,
+                                id: item.id || ""
+                            };
+                        });
+
+                        const wb = XLSX.utils.book_new();
+                        const ws = XLSX.utils.json_to_sheet(rows, { header: HEADERS });
+                        ws['!cols'] = HEADERS.map(h => ({ wch: Math.max(12, h.length + 2) }));
+
+                        XLSX.utils.book_append_sheet(wb, ws, "Buku Besar");
+                        downloadWorkbook(wb, filename);
+
+                    } else {
+                        log("Error HTTP: " + xhr.status);
+                        alert("Gagal mengambil data!");
+                    }
+                };
+
+                xhr.onerror = function () {
+                    log("Error jaringan");
+                };
+
+                xhr.send();
+            });
+
+        })();
+    </script>
+</body>
+
+</html>
